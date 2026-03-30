@@ -305,9 +305,9 @@ Implement `BenchmarkAdapter` to plug any new evaluation domain into A-Evolve. Th
 If you use A-Evolve in your research, please cite our position paper:
 
 ```bibtex
-@article{a-evolve2025,
+@article{a-evolve2026,
     title   = {Position: Agentic Evolution is the Path to Evolving LLMs},
-    author  = {A-EVO-Lab},
+    author  = {Minhua Lin, Hanqing Lu, Zhan Shi, Bing He, Rui Mao, Zhiwei Zhang, Zongyu Wu, Xianfeng Tang, Hui Liu, Zhenwei Dai, Xiang Zhang, Suhang Wang, Benoit Dumoulin, Jian Pei},
     journal = {arXiv preprint arXiv:2602.00359},
     year    = {2026},
     url     = {https://arxiv.org/abs/2602.00359}
