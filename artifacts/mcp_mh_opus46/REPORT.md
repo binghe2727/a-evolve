@@ -73,6 +73,27 @@ Total evolution wall time: 3.5 hours.
 | Std Dev (pass rate) | 4.5% | 3.8% | -0.7% |
 | Avg solve time per trial | 727s | 257s | **2.8x faster** |
 
+## Limitations: Task-Specific Leakage in Evolved Harness
+
+The evolved `harness.py` contains hardcoded facts specific to individual
+benchmark tasks (e.g., a celebrity's exact date of death). This constitutes
+**task-specific knowledge leakage** — the proposer, having access to task
+trajectories during evolution, embedded answer fragments directly into the
+harness rather than improving general-purpose reasoning strategies.
+
+Our codebase includes a **regex-based audit** (`_audit_leakage` in
+`engine.py`) that scans evolved workspace files for hardcoded task IDs before
+accepting a candidate. This catches direct ID leakage but does not catch
+semantic leakage such as hardcoded facts derived from task content.
+
+As noted by Lee et al. (2026, §4.3): *"We additionally check for overfitting
+by manual inspection and regex-based audits for task-specific string leakage
+into evolved harnesses."* Our experience confirms that regex-based audits
+alone are insufficient — **manual inspection remains necessary** to catch
+semantic leakage that does not involve literal task IDs. Future work should
+explore automated semantic leakage detection (e.g., LLM-based auditing of
+whether harness content encodes task-specific answers).
+
 ## Artifact
 
 The evolved harness is saved in this directory:
