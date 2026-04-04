@@ -56,7 +56,7 @@ class ArcAgent(BaseAgent):
         workspace_dir: str | Path,
         model_id: str = "us.anthropic.claude-opus-4-6-v1",
         region: str = "us-west-2",
-        max_tokens: int = 4096,
+        max_tokens: int = 8000,
         max_actions: int = 5000,
     ):
         super().__init__(workspace_dir)
@@ -108,27 +108,49 @@ class ArcAgent(BaseAgent):
                 steps=[{"error": str(e)}],
             )
 
-    def _play_game(self, task: Task, game_id: str, max_actions: int) -> Trajectory:
-        """Run the code-driven game loop with per-action LLM calls."""
-        import arc_agi
-        from arcengine import GameAction, GameState
+    def play_game_on_env(self, env: Any, game_id: str, max_actions: int) -> dict:
+        """Play a game on a pre-created environment (used by Swarm).
 
-        from .game_loop import GameResult, run_game, convert_frame_data
+        Args:
+            env: arc_agi EnvironmentWrapper (from arcade.make with scorecard_id)
+            game_id: Game identifier
+            max_actions: Action budget
 
-        # Initialize arcade + environment
-        arcade_kwargs: dict[str, Any] = {}
-        api_key = task.metadata.get("api_key")
-        if api_key:
-            arcade_kwargs["arc_api_key"] = api_key
-        op_mode = task.metadata.get("operation_mode", "normal")
-        if op_mode != "normal":
-            from arc_agi import OperationMode
-            arcade_kwargs["operation_mode"] = getattr(OperationMode, op_mode.upper())
+        Returns:
+            Result dict with game_id, levels_completed, total_actions, etc.
+        """
+        self._message_history = []
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
 
-        arcade = arc_agi.Arcade(**arcade_kwargs)
-        env = arcade.make(game_id, render_mode=None)
+        result = self._run_game_loop(env, game_id, max_actions)
 
-        # Build system prompt from workspace
+        return {
+            "game_id": game_id,
+            "game_completed": result.game_completed,
+            "levels_completed": result.levels_completed,
+            "total_levels": result.total_levels,
+            "total_actions": result.total_actions,
+            "per_level_actions": result.per_level_actions,
+            "score": self._compute_score(result),
+            "elapsed_sec": result.elapsed_sec,
+            "usage": {
+                "input_tokens": self._total_input_tokens,
+                "output_tokens": self._total_output_tokens,
+                "total_tokens": self._total_input_tokens + self._total_output_tokens,
+            },
+        }
+
+    def _run_game_loop(self, env: Any, game_id: str, max_actions: int) -> Any:
+        """Core game loop shared by solve() and play_game_on_env().
+
+        Follows arcprize/ARC-AGI-3-Agents Agent.main() pattern:
+        code-driven while loop, one LLM call per action.
+        """
+        from arcengine import GameAction
+
+        from .game_loop import run_game
+
         system_prompt = self._build_system_prompt()
 
         # Closure: choose_action called once per game step
@@ -141,18 +163,10 @@ class ArcAgent(BaseAgent):
             if "NOT_PLAYED" in state or "GAME_OVER" in state:
                 return GameAction.RESET
 
-            # Build observation text for this step
             observation = self._format_observation(frames, latest_frame, meta)
-
-            # Call LLM for one action
-            action_str, reasoning = self._call_llm(
-                system_prompt, observation, meta
-            )
-
-            # Parse action
+            action_str, reasoning = self._call_llm(system_prompt, observation, meta)
             action = self._parse_action(action_str, meta)
 
-            # Attach reasoning for recording
             if hasattr(action, "reasoning"):
                 action.reasoning = reasoning
 
@@ -171,14 +185,32 @@ class ArcAgent(BaseAgent):
                 return True
             return False
 
-        # Run the game loop
-        result = run_game(
+        return run_game(
             env=env,
             game_id=game_id,
             choose_action=choose_action,
             is_done=is_done,
             max_actions=max_actions,
         )
+
+    def _play_game(self, task: Task, game_id: str, max_actions: int) -> Trajectory:
+        """Run the code-driven game loop with per-action LLM calls."""
+        import arc_agi
+
+        # Create arcade + environment (standalone mode, no Swarm)
+        arcade_kwargs: dict[str, Any] = {}
+        api_key = task.metadata.get("api_key")
+        if api_key:
+            arcade_kwargs["arc_api_key"] = api_key
+        op_mode = task.metadata.get("operation_mode", "normal")
+        if op_mode != "normal":
+            from arc_agi import OperationMode
+            arcade_kwargs["operation_mode"] = getattr(OperationMode, op_mode.upper())
+
+        arcade = arc_agi.Arcade(**arcade_kwargs)
+        env = arcade.make(game_id, render_mode=None)
+
+        result = self._run_game_loop(env, game_id, max_actions)
 
         # Build trajectory
         usage = {
