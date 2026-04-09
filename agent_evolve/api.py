@@ -69,6 +69,7 @@ _SEED_REGISTRY: dict[str, str] = {
     "arc-mas": "arc-mas",
     "arc-agi-3-mas": "arc-mas",
     "arc-agi3": "arc",
+    "mcp-mh": "mcp_mh",
 }
 
 
